@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff,
-  Palette, Info, List, ListOrdered
+  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Eye, EyeOff,
+  Palette, Info, List, ListOrdered, AtSign, IdCard
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
@@ -18,12 +18,14 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [theme, setTheme] = useState('light'); // 'light', 'dark', 'amber'
+  const [theme, setTheme] = useState('light');
 
-  // Auth States
+  // Auth Form States
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -71,17 +73,45 @@ export default function App() {
   const handleAuth = async (e) => {
     e.preventDefault();
     setAuthError('');
-    try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        alert('Check your email for the confirmation link!');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+
+    // Generate valid internal email mapping from username
+    const formattedEmail = `${username.trim().toLowerCase()}@cloudnotes.internal`;
+
+    if (isSignUp) {
+      if (password !== confirmPassword) {
+        setAuthError('Passwords do not match');
+        return;
       }
-    } catch (err) {
-      setAuthError(err.message);
+      if (password.length < 6) {
+        setAuthError('Password must be at least 6 characters');
+        return;
+      }
+
+      try {
+        const { error } = await supabase.auth.signUp({
+          email: formattedEmail,
+          password: password,
+          options: {
+            data: {
+              full_name: fullName,
+              username: username.trim()
+            }
+          }
+        });
+        if (error) throw error;
+      } catch (err) {
+        setAuthError(err.message);
+      }
+    } else {
+      try {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: formattedEmail,
+          password: password
+        });
+        if (error) throw error;
+      } catch (err) {
+        setAuthError('Invalid username or password');
+      }
     }
   };
 
@@ -141,7 +171,6 @@ export default function App() {
     setActiveNote({ ...activeNote, content: updated });
   };
 
-  // Theme Styling Rules
   const themeClasses = {
     light: 'bg-[#F5F5F7] text-gray-900',
     dark: 'bg-gray-900 text-white',
@@ -154,7 +183,7 @@ export default function App() {
     amber: 'bg-amber-100/50 border-amber-200 text-amber-900'
   }[theme];
 
-  // LOGIN / SIGNUP SCREEN
+  // AUTH SCREEN (LOGIN & SIGN UP)
   if (!session) {
     return (
       <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4 font-sans">
@@ -165,7 +194,7 @@ export default function App() {
             </div>
             <h1 className="text-2xl font-bold text-gray-800">CloudNotes</h1>
             <p className="text-xs text-gray-400 mt-1">
-              {isSignUp ? 'Create an account to start taking notes' : 'Welcome back! Sign in to sync your notes'}
+              {isSignUp ? 'Create an account to sync notes' : 'Sign in to access your notes'}
             </p>
           </div>
 
@@ -176,14 +205,28 @@ export default function App() {
           )}
 
           <form onSubmit={handleAuth} className="space-y-3">
+            {isSignUp && (
+              <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
+                <IdCard size={18} className="text-gray-400 mr-2" />
+                <input
+                  type="text"
+                  placeholder="Name"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-transparent border-none outline-none text-sm text-black placeholder-gray-400"
+                />
+              </div>
+            )}
+
             <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
-              <Mail size={18} className="text-gray-400 mr-2" />
+              <AtSign size={18} className="text-gray-400 mr-2" />
               <input
-                type="email"
-                placeholder="Email address"
+                type="text"
+                placeholder="Username"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-transparent border-none outline-none text-sm text-black placeholder-gray-400"
               />
             </div>
@@ -207,9 +250,23 @@ export default function App() {
               </button>
             </div>
 
+            {isSignUp && (
+              <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
+                <Lock size={18} className="text-gray-400 mr-2" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Confirm Password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full bg-transparent border-none outline-none text-sm text-black placeholder-gray-400 font-bold"
+                />
+              </div>
+            )}
+
             <button
               type="submit"
-              className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-xl shadow-md transition"
+              className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-xl shadow-md transition mt-2"
             >
               {isSignUp ? 'Create Account' : 'Sign In'}
             </button>
@@ -244,8 +301,7 @@ export default function App() {
           <button onClick={() => setActiveNote(null)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
             <ArrowLeft size={24} />
           </button>
-          
-          {/* List Formatting Toolbar */}
+
           <div className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-xl">
             <button 
               onClick={() => insertList('ordered')} 
@@ -390,10 +446,14 @@ export default function App() {
             </button>
             <div className="flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-2xl font-bold mb-3">
-                {session.user.email[0].toUpperCase()}
+                {(session.user.user_metadata?.full_name || session.user.user_metadata?.username || 'U')[0].toUpperCase()}
               </div>
-              <h2 className="text-xl font-bold text-gray-800">Account Profile</h2>
-              <p className="text-xs text-gray-400">{session.user.email}</p>
+              <h2 className="text-xl font-bold text-gray-800">
+                {session.user.user_metadata?.full_name || 'User Profile'}
+              </h2>
+              <p className="text-xs text-gray-400">
+                @{session.user.user_metadata?.username || 'user'}
+              </p>
               
               <div className="w-full mt-6 space-y-2">
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
@@ -425,7 +485,6 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
-              {/* Theme Picker */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">App Theme</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -450,7 +509,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Developer Info Section */}
               <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
                 <Info size={20} className="text-amber-500 mt-0.5" />
                 <div>
