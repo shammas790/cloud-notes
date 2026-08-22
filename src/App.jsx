@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff
+  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff,
+  Palette, Info, List, ListOrdered
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
@@ -17,6 +18,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [theme, setTheme] = useState('light'); // 'light', 'dark', 'amber'
 
   // Auth States
   const [isSignUp, setIsSignUp] = useState(false);
@@ -131,6 +133,27 @@ export default function App() {
     }
   };
 
+  const insertList = (type) => {
+    if (!activeNote) return;
+    const currentText = activeNote.content || '';
+    const prefix = type === 'ordered' ? '1. ' : '• ';
+    const updated = currentText ? `${currentText}\n${prefix}` : prefix;
+    setActiveNote({ ...activeNote, content: updated });
+  };
+
+  // Theme Styling Rules
+  const themeClasses = {
+    light: 'bg-[#F5F5F7] text-gray-900',
+    dark: 'bg-gray-900 text-white',
+    amber: 'bg-amber-50 text-amber-900'
+  }[theme];
+
+  const cardClasses = {
+    light: 'bg-white border-gray-100 text-gray-800',
+    dark: 'bg-gray-800 border-gray-700 text-white',
+    amber: 'bg-amber-100/50 border-amber-200 text-amber-900'
+  }[theme];
+
   // LOGIN / SIGNUP SCREEN
   if (!session) {
     return (
@@ -216,11 +239,30 @@ export default function App() {
     });
 
     return (
-      <div className="min-h-screen bg-white text-gray-900 flex flex-col font-sans">
+      <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-white text-gray-900'} flex flex-col font-sans`}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-          <button onClick={() => setActiveNote(null)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-full">
+          <button onClick={() => setActiveNote(null)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-full">
             <ArrowLeft size={24} />
           </button>
+          
+          {/* List Formatting Toolbar */}
+          <div className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded-xl">
+            <button 
+              onClick={() => insertList('ordered')} 
+              title="Add Ordered List (1.)"
+              className="p-1.5 text-gray-700 hover:bg-white rounded-lg transition"
+            >
+              <ListOrdered size={18} />
+            </button>
+            <button 
+              onClick={() => insertList('unordered')} 
+              title="Add Unordered List (•)"
+              className="p-1.5 text-gray-700 hover:bg-white rounded-lg transition"
+            >
+              <List size={18} />
+            </button>
+          </div>
+
           <div className="flex items-center gap-2">
             {activeNote.id && (
               <button onClick={() => handleDelete(activeNote.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full">
@@ -239,7 +281,7 @@ export default function App() {
             placeholder="Title"
             value={activeNote.title || ''}
             onChange={(e) => setActiveNote({ ...activeNote, title: e.target.value })}
-            className="text-2xl font-bold placeholder-gray-300 border-none outline-none mb-2 w-full text-black"
+            className={`text-2xl font-bold placeholder-gray-300 border-none outline-none mb-2 w-full bg-transparent ${theme === 'dark' ? 'text-white' : 'text-black'}`}
           />
           <div className="text-xs text-gray-400 mb-4">
             {formattedDate} | {charCount} characters
@@ -248,7 +290,7 @@ export default function App() {
             placeholder="Start typing your note..."
             value={activeNote.content || ''}
             onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })}
-            className="w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none text-black"
+            className={`w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none bg-transparent ${theme === 'dark' ? 'text-white' : 'text-black'}`}
           />
         </div>
       </div>
@@ -262,7 +304,7 @@ export default function App() {
 
   // MAIN HOMESCREEN
   return (
-    <div className="min-h-screen bg-[#F5F5F7] text-gray-900 flex flex-col font-sans relative pb-20">
+    <div className={`min-h-screen ${themeClasses} flex flex-col font-sans relative pb-20 transition-colors`}>
       <header className="px-6 pt-6 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <button className="text-amber-500 pb-1 border-b-2 border-amber-500 font-semibold text-lg">
@@ -271,24 +313,24 @@ export default function App() {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowProfile(true)} className="p-2 text-gray-600 hover:bg-gray-200 rounded-full">
+          <button onClick={() => setShowProfile(true)} className="p-2 text-gray-500 hover:bg-gray-200/50 rounded-full">
             <User size={22} />
           </button>
-          <button onClick={() => setShowSettings(true)} className="p-2 text-gray-600 hover:bg-gray-200 rounded-full">
+          <button onClick={() => setShowSettings(true)} className="p-2 text-gray-500 hover:bg-gray-200/50 rounded-full">
             <Settings size={22} />
           </button>
         </div>
       </header>
 
       <div className="px-6 my-2">
-        <div className="flex items-center bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
+        <div className={`flex items-center ${cardClasses} px-4 py-2 rounded-2xl shadow-sm border`}>
           <Search size={18} className="text-gray-400 mr-2" />
           <input 
             type="text"
             placeholder="Search notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-transparent border-none outline-none text-sm text-black"
+            className="w-full bg-transparent border-none outline-none text-sm"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery('')} className="text-gray-400">
@@ -302,8 +344,8 @@ export default function App() {
         <span className="px-4 py-1.5 text-xs bg-amber-400 text-white font-semibold rounded-xl shadow-sm">
           All ({notes.length})
         </span>
-        <button className="p-2 bg-white text-amber-500 rounded-xl shadow-sm hover:bg-gray-50">
-          <Folder size={16} />
+        <button className={`p-2 ${cardClasses} rounded-xl shadow-sm border`}>
+          <Folder size={16} className="text-amber-500" />
         </button>
       </div>
 
@@ -319,12 +361,12 @@ export default function App() {
             <div
               key={note.id}
               onClick={() => setActiveNote(note)}
-              className="bg-white p-4 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer border border-gray-100"
+              className={`${cardClasses} p-4 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer border`}
             >
-              <h3 className="text-base font-bold text-gray-800 truncate">
+              <h3 className="text-base font-bold truncate">
                 {note.title || 'Untitled'}
               </h3>
-              <p className="text-sm text-gray-500 mt-1 line-clamp-2 leading-snug">
+              <p className="text-sm opacity-70 mt-1 line-clamp-2 leading-snug whitespace-pre-line">
                 {note.content || 'No content'}
               </p>
             </div>
@@ -342,7 +384,7 @@ export default function App() {
       {/* PROFILE MODAL */}
       {showProfile && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
+          <div className="bg-white text-gray-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
             <button onClick={() => setShowProfile(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600">
               <X size={20} />
             </button>
@@ -374,7 +416,7 @@ export default function App() {
       {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative">
+          <div className="bg-white text-gray-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-lg font-bold text-gray-800">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 text-gray-400 hover:text-gray-600">
@@ -382,11 +424,46 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {/* Theme Picker */}
+              <div>
+                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">App Theme</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button 
+                    onClick={() => setTheme('light')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 ${theme === 'light' ? 'bg-amber-400 text-white border-amber-400' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Palette size={14} /> Light
+                  </button>
+                  <button 
+                    onClick={() => setTheme('dark')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 ${theme === 'dark' ? 'bg-amber-400 text-white border-amber-400' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Palette size={14} /> Dark
+                  </button>
+                  <button 
+                    onClick={() => setTheme('amber')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1 ${theme === 'amber' ? 'bg-amber-400 text-white border-amber-400' : 'bg-gray-50 border-gray-200'}`}
+                  >
+                    <Palette size={14} /> Warm
+                  </button>
+                </div>
+              </div>
+
+              {/* Developer Info Section */}
+              <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-3">
+                <Info size={20} className="text-amber-500 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-bold text-gray-800">Developer Info</h4>
+                  <p className="text-xs text-gray-600 mt-0.5">Developed by **Shammas**</p>
+                  <p className="text-[10px] text-gray-400 mt-1">CloudNotes v1.0 • Powered by React & Supabase</p>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
                 <div className="flex items-center gap-3">
                   <Shield size={20} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Supabase Cloud Sync</span>
+                  <span className="text-sm font-medium text-gray-700">Cloud Sync</span>
                 </div>
                 <span className="text-xs text-green-500 font-semibold">Active</span>
               </div>
