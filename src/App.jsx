@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail
+  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
@@ -22,6 +22,7 @@ export default function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function App() {
         .order('id', { ascending: false });
 
       if (error) {
-        // Fallback fetch if user_id column isn't enforced
         const { data: allNotes } = await supabase.from('notes').select('*').order('id', { ascending: false });
         if (allNotes) setNotes(allNotes);
       } else if (data) {
@@ -161,20 +161,27 @@ export default function App() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-transparent border-none outline-none text-sm"
+                className="w-full bg-transparent border-none outline-none text-sm text-black placeholder-gray-400"
               />
             </div>
 
             <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
               <Lock size={18} className="text-gray-400 mr-2" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-transparent border-none outline-none text-sm"
+                className="w-full bg-transparent border-none outline-none text-sm text-black placeholder-gray-400 font-bold"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="text-gray-400 hover:text-gray-600 ml-2 focus:outline-none"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
 
             <button
@@ -232,7 +239,7 @@ export default function App() {
             placeholder="Title"
             value={activeNote.title || ''}
             onChange={(e) => setActiveNote({ ...activeNote, title: e.target.value })}
-            className="text-2xl font-bold placeholder-gray-300 border-none outline-none mb-2 w-full"
+            className="text-2xl font-bold placeholder-gray-300 border-none outline-none mb-2 w-full text-black"
           />
           <div className="text-xs text-gray-400 mb-4">
             {formattedDate} | {charCount} characters
@@ -241,7 +248,7 @@ export default function App() {
             placeholder="Start typing your note..."
             value={activeNote.content || ''}
             onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })}
-            className="w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none"
+            className="w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none text-black"
           />
         </div>
       </div>
@@ -281,7 +288,7 @@ export default function App() {
             placeholder="Search notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-transparent border-none outline-none text-sm"
+            className="w-full bg-transparent border-none outline-none text-sm text-black"
           />
           {searchQuery && (
             <button onClick={() => setSearchQuery('')} className="text-gray-400">
