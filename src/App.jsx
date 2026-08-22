@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search, X, LogOut, Shield, Moon
+  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail
 } from 'lucide-react';
 
-// Direct fallback Supabase client setup
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pzrzNMFnf6L_Y4zbIcZ1hA_32vgbJMH';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function App() {
+  const [session, setSession] = useState(null);
   const [notes, setNotes] = useState([]);
   const [activeNote, setActiveNote] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -18,25 +18,75 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
 
+  // Auth States
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
   useEffect(() => {
-    fetchNotes();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchNotes(session.user.id);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchNotes(session.user.id);
+      else {
+        setNotes([]);
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const fetchNotes = async () => {
+  const fetchNotes = async (userId) => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('notes')
         .select('*')
+        .eq('user_id', userId)
         .order('id', { ascending: false });
 
-      if (error) throw error;
-      if (data) setNotes(data);
+      if (error) {
+        // Fallback fetch if user_id column isn't enforced
+        const { data: allNotes } = await supabase.from('notes').select('*').order('id', { ascending: false });
+        if (allNotes) setNotes(allNotes);
+      } else if (data) {
+        setNotes(data);
+      }
     } catch (err) {
       console.error('Error fetching notes:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        alert('Check your email for the confirmation link!');
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      }
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setShowProfile(false);
+    setShowSettings(false);
   };
 
   const handleCreateNew = () => {
@@ -51,17 +101,18 @@ export default function App() {
     }
 
     try {
+      const payload = {
+        title: activeNote.title,
+        content: activeNote.content,
+        user_id: session?.user?.id
+      };
+
       if (activeNote.id) {
-        await supabase
-          .from('notes')
-          .update({ title: activeNote.title, content: activeNote.content })
-          .eq('id', activeNote.id);
+        await supabase.from('notes').update(payload).eq('id', activeNote.id);
       } else {
-        await supabase
-          .from('notes')
-          .insert([{ title: activeNote.title, content: activeNote.content }]);
+        await supabase.from('notes').insert([payload]);
       }
-      await fetchNotes();
+      if (session) await fetchNotes(session.user.id);
     } catch (err) {
       console.error('Error saving note:', err);
     } finally {
@@ -72,7 +123,7 @@ export default function App() {
   const handleDelete = async (id) => {
     try {
       await supabase.from('notes').delete().eq('id', id);
-      await fetchNotes();
+      if (session) await fetchNotes(session.user.id);
     } catch (err) {
       console.error('Error deleting note:', err);
     } finally {
@@ -80,12 +131,74 @@ export default function App() {
     }
   };
 
-  const filteredNotes = notes.filter(n => 
-    (n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (n.content || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // LOGIN / SIGNUP SCREEN
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F7] flex items-center justify-center p-4 font-sans">
+        <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-xl border border-gray-100">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-amber-400 text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-md">
+              <FileText size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">CloudNotes</h1>
+            <p className="text-xs text-gray-400 mt-1">
+              {isSignUp ? 'Create an account to start taking notes' : 'Welcome back! Sign in to sync your notes'}
+            </p>
+          </div>
 
-  // FULL SCREEN EDITOR VIEW
+          {authError && (
+            <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs rounded-xl border border-red-100">
+              {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleAuth} className="space-y-3">
+            <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
+              <Mail size={18} className="text-gray-400 mr-2" />
+              <input
+                type="email"
+                placeholder="Email address"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-transparent border-none outline-none text-sm"
+              />
+            </div>
+
+            <div className="flex items-center bg-gray-50 px-3 py-2.5 rounded-xl border border-gray-100">
+              <Lock size={18} className="text-gray-400 mr-2" />
+              <input
+                type="password"
+                placeholder="Password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-transparent border-none outline-none text-sm"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-white font-bold rounded-xl shadow-md transition"
+            >
+              {isSignUp ? 'Create Account' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setAuthError(''); }}
+              className="text-xs text-amber-500 font-semibold hover:underline"
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // NOTE EDITOR VIEW
   if (activeNote) {
     const charCount = ((activeNote.title || '') + (activeNote.content || '')).length;
     const formattedDate = new Date().toLocaleDateString('en-US', {
@@ -135,9 +248,14 @@ export default function App() {
     );
   }
 
+  const filteredNotes = notes.filter(n => 
+    (n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (n.content || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // MAIN HOMESCREEN
   return (
     <div className="min-h-screen bg-[#F5F5F7] text-gray-900 flex flex-col font-sans relative pb-20">
-      {/* Top Navigation */}
       <header className="px-6 pt-6 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <button className="text-amber-500 pb-1 border-b-2 border-amber-500 font-semibold text-lg">
@@ -155,7 +273,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Search Bar */}
       <div className="px-6 my-2">
         <div className="flex items-center bg-white px-4 py-2 rounded-2xl shadow-sm border border-gray-100">
           <Search size={18} className="text-gray-400 mr-2" />
@@ -174,7 +291,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Category Pills */}
       <div className="px-6 my-2 flex items-center gap-2">
         <span className="px-4 py-1.5 text-xs bg-amber-400 text-white font-semibold rounded-xl shadow-sm">
           All ({notes.length})
@@ -184,7 +300,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* Notes Grid */}
       <main className="px-6 flex-1 max-w-2xl mx-auto w-full space-y-3 mt-2">
         {loading ? (
           <div className="text-center py-20 text-gray-400 text-sm">Loading your notes...</div>
@@ -210,7 +325,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Yellow Plus Button */}
       <button
         onClick={handleCreateNew}
         className="fixed bottom-8 right-6 w-14 h-14 bg-amber-400 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-amber-500 transition active:scale-95"
@@ -221,59 +335,51 @@ export default function App() {
       {/* PROFILE MODAL */}
       {showProfile && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
             <button onClick={() => setShowProfile(false)} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600">
               <X size={20} />
             </button>
             <div className="flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-2xl font-bold mb-3">
-                S
+                {session.user.email[0].toUpperCase()}
               </div>
-              <h2 className="text-xl font-bold text-gray-800">Shammas</h2>
-              <p className="text-xs text-gray-400">shammas790@github.com</p>
+              <h2 className="text-xl font-bold text-gray-800">Account Profile</h2>
+              <p className="text-xs text-gray-400">{session.user.email}</p>
               
               <div className="w-full mt-6 space-y-2">
                 <div className="flex justify-between items-center p-3 bg-gray-50 rounded-xl text-sm text-gray-600">
-                  <span>Total Notes Saved</span>
+                  <span>Saved Notes</span>
                   <span className="font-bold text-amber-500">{notes.length}</span>
                 </div>
               </div>
 
               <button 
-                onClick={() => setShowProfile(false)}
-                className="w-full mt-6 py-2.5 bg-amber-400 text-white font-semibold rounded-xl shadow-md hover:bg-amber-500 transition"
+                onClick={handleLogout}
+                className="w-full mt-6 py-2.5 bg-red-500 text-white font-semibold rounded-xl shadow-md hover:bg-red-600 transition flex items-center justify-center gap-2"
               >
-                Close Profile
+                <LogOut size={18} /> Log Out
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* SETTINGS DRAWER */}
+      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-800">App Settings</h2>
+              <h2 className="text-lg font-bold text-gray-800">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
-                <div className="flex items-center gap-3">
-                  <Moon size={20} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Dark Mode</span>
-                </div>
-                <span className="text-xs text-gray-400">Coming Soon</span>
-              </div>
-
+            <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
                 <div className="flex items-center gap-3">
                   <Shield size={20} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Cloud Sync (Supabase)</span>
+                  <span className="text-sm font-medium text-gray-700">Supabase Cloud Sync</span>
                 </div>
                 <span className="text-xs text-green-500 font-semibold">Active</span>
               </div>
