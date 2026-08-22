@@ -1,28 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
-  Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search 
+  Plus, ArrowLeft, Check, Trash2, 
+  Folder, Settings, FileText 
 } from 'lucide-react';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Supabase client setup with direct fallback keys
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pzrzNMFnf6L_Y4zbIcZ1hA_32vgbJMH';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function App() {
   const [notes, setNotes] = useState([]);
   const [activeNote, setActiveNote] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchNotes();
   }, []);
 
   const fetchNotes = async () => {
-    const { data } = await supabase
-      .from('notes')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (data) setNotes(data);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('notes')
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (error) throw error;
+      if (data) setNotes(data);
+    } catch (err) {
+      console.error('Error fetching notes:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateNew = () => {
@@ -30,37 +41,48 @@ export default function App() {
   };
 
   const handleSave = async () => {
-    if (!activeNote.title && !activeNote.content) {
+    if (!activeNote) return;
+    if (!activeNote.title.trim() && !activeNote.content.trim()) {
       setActiveNote(null);
       return;
     }
 
-    if (activeNote.id) {
-      await supabase
-        .from('notes')
-        .update({ title: activeNote.title, content: activeNote.content })
-        .eq('id', activeNote.id);
-    } else {
-      await supabase
-        .from('notes')
-        .insert([{ title: activeNote.title, content: activeNote.content }]);
+    try {
+      if (activeNote.id) {
+        await supabase
+          .from('notes')
+          .update({ title: activeNote.title, content: activeNote.content })
+          .eq('id', activeNote.id);
+      } else {
+        await supabase
+          .from('notes')
+          .insert([{ title: activeNote.title, content: activeNote.content }]);
+      }
+      await fetchNotes();
+    } catch (err) {
+      console.error('Error saving note:', err);
+    } finally {
+      setActiveNote(null);
     }
-
-    fetchNotes();
-    setActiveNote(null);
   };
 
   const handleDelete = async (id) => {
-    await supabase.from('notes').delete().eq('id', id);
-    fetchNotes();
-    if (activeNote?.id === id) setActiveNote(null);
+    try {
+      await supabase.from('notes').delete().eq('id', id);
+      await fetchNotes();
+    } catch (err) {
+      console.error('Error deleting note:', err);
+    } finally {
+      if (activeNote?.id === id) setActiveNote(null);
+    }
   };
 
+  // FULL SCREEN EDITOR VIEW
   if (activeNote) {
-    const charCount = (activeNote.title + activeNote.content).length;
+    const charCount = ((activeNote.title || '') + (activeNote.content || '')).length;
     const formattedDate = new Date().toLocaleDateString('en-US', {
       day: 'numeric',
-      month: 'long',
+      month: 'short',
       hour: '2-digit',
       minute: '2-digit'
     });
@@ -87,7 +109,7 @@ export default function App() {
           <input
             type="text"
             placeholder="Title"
-            value={activeNote.title}
+            value={activeNote.title || ''}
             onChange={(e) => setActiveNote({ ...activeNote, title: e.target.value })}
             className="text-2xl font-medium placeholder-gray-300 border-none outline-none mb-2 w-full"
           />
@@ -96,7 +118,7 @@ export default function App() {
           </div>
           <textarea
             placeholder="Start typing..."
-            value={activeNote.content}
+            value={activeNote.content || ''}
             onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })}
             className="w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none font-normal"
           />
@@ -105,6 +127,7 @@ export default function App() {
     );
   }
 
+  // MAIN HOME VIEW
   return (
     <div className="min-h-screen bg-[#F5F5F7] text-gray-900 flex flex-col font-sans relative pb-20">
       <header className="px-6 pt-6 pb-2 flex items-center justify-between">
@@ -131,7 +154,9 @@ export default function App() {
       </div>
 
       <main className="px-6 flex-1 max-w-2xl mx-auto w-full space-y-3">
-        {notes.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-20 text-gray-400 text-sm">Loading notes...</div>
+        ) : notes.length === 0 ? (
           <div className="text-center py-20 text-gray-400 text-sm">
             No notes yet. Tap + to create one!
           </div>
@@ -148,12 +173,6 @@ export default function App() {
               <p className="text-sm text-gray-500 mt-1 line-clamp-2 leading-snug">
                 {note.content || 'No content'}
               </p>
-              <span className="text-[11px] text-gray-400 mt-2 block">
-                {new Date(note.created_at).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric'
-                })}
-              </span>
             </div>
           ))
         )}
