@@ -11,14 +11,14 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishabl
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const TEXT_COLORS = [
-  { name: 'Default', value: 'text-gray-900 dark:text-white', badge: 'bg-gray-800' },
-  { name: 'Red', value: 'text-red-500 font-semibold', badge: 'bg-red-500' },
-  { name: 'Blue', value: 'text-blue-500 font-semibold', badge: 'bg-blue-500' },
-  { name: 'Green', value: 'text-green-500 font-semibold', badge: 'bg-green-500' },
-  { name: 'Yellow', value: 'text-yellow-500 font-semibold', badge: 'bg-yellow-500' },
-  { name: 'Purple', value: 'text-purple-500 font-semibold', badge: 'bg-purple-500' },
-  { name: 'Orange', value: 'text-orange-500 font-semibold', badge: 'bg-orange-500' },
-  { name: 'Rainbow', value: 'bg-gradient-to-r from-red-500 via-green-500 via-blue-500 to-purple-500 bg-clip-text text-transparent font-black', badge: 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500' }
+  { id: 'default', name: 'Default', value: 'text-gray-900 dark:text-white', badge: 'bg-gray-800' },
+  { id: 'red', name: 'Red', value: 'text-red-500 font-semibold', badge: 'bg-red-500' },
+  { id: 'blue', name: 'Blue', value: 'text-blue-500 font-semibold', badge: 'bg-blue-500' },
+  { id: 'green', name: 'Green', value: 'text-green-500 font-semibold', badge: 'bg-green-500' },
+  { id: 'yellow', name: 'Yellow', value: 'text-yellow-500 font-semibold', badge: 'bg-yellow-500' },
+  { id: 'purple', name: 'Purple', value: 'text-purple-500 font-semibold', badge: 'bg-purple-500' },
+  { id: 'orange', name: 'Orange', value: 'text-orange-500 font-semibold', badge: 'bg-orange-500' },
+  { id: 'rainbow', name: 'Rainbow', value: 'bg-gradient-to-r from-red-500 via-green-500 via-blue-500 to-purple-500 bg-clip-text text-transparent font-black', badge: 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500' }
 ];
 
 export default function App() {
@@ -58,6 +58,23 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const parseNoteData = (note) => {
+    let colorClass = 'text-gray-900 dark:text-white';
+    let content = note.content || '';
+
+    if (content.startsWith('<!--COLOR:')) {
+      const parts = content.split('-->');
+      const colorId = parts[0].replace('<!--COLOR:', '');
+      const foundColor = TEXT_COLORS.find(c => c.id === colorId);
+      if (foundColor) colorClass = foundColor.value;
+      content = parts.slice(1).join('-->');
+    } else if (note.color) {
+      colorClass = note.color;
+    }
+
+    return { ...note, content, colorClass };
+  };
+
   const fetchNotes = async (userId) => {
     setLoading(true);
     try {
@@ -66,7 +83,10 @@ export default function App() {
         .select('*')
         .order('id', { ascending: false });
 
-      if (data) setNotes(data);
+      if (data) {
+        const parsed = data.map(parseNoteData);
+        setNotes(parsed);
+      }
     } catch (err) {
       console.error('Error fetching notes:', err);
     } finally {
@@ -98,7 +118,7 @@ export default function App() {
   };
 
   const handleCreateNew = () => {
-    setActiveNote({ title: '', content: '', color: 'text-gray-900 dark:text-white', is_starred: false });
+    setActiveNote({ title: '', content: '', colorClass: 'text-gray-900 dark:text-white', is_starred: false });
   };
 
   const handleSave = async () => {
@@ -108,37 +128,36 @@ export default function App() {
       return;
     }
 
-    const newNote = {
+    const selectedColorObj = TEXT_COLORS.find(c => c.value === activeNote.colorClass) || TEXT_COLORS[0];
+    const encodedContent = `<!--COLOR:${selectedColorObj.id}-->${activeNote.content || ''}`;
+
+    const newNoteDB = {
       title: activeNote.title || '',
-      content: activeNote.content || '',
-      color: activeNote.color || 'text-gray-900 dark:text-white',
+      content: encodedContent,
       is_starred: activeNote.is_starred || false,
       user_id: session?.user?.id
     };
 
+    const newNoteUI = {
+      ...activeNote,
+      content: activeNote.content || '',
+      colorClass: activeNote.colorClass || 'text-gray-900 dark:text-white',
+      id: activeNote.id || Date.now()
+    };
+
     if (activeNote.id) {
-      setNotes(notes.map(n => n.id === activeNote.id ? { ...n, ...newNote } : n));
+      setNotes(notes.map(n => n.id === activeNote.id ? newNoteUI : n));
     } else {
-      setNotes([{ ...newNote, id: Date.now() }, ...notes]);
+      setNotes([newNoteUI, ...notes]);
     }
 
     setActiveNote(null);
 
     try {
       if (activeNote.id) {
-        const { error } = await supabase.from('notes').update(newNote).eq('id', activeNote.id);
-        if (error) {
-          delete newNote.color;
-          delete newNote.is_starred;
-          await supabase.from('notes').update(newNote).eq('id', activeNote.id);
-        }
+        await supabase.from('notes').update(newNoteDB).eq('id', activeNote.id);
       } else {
-        const { error } = await supabase.from('notes').insert([newNote]);
-        if (error) {
-          delete newNote.color;
-          delete newNote.is_starred;
-          await supabase.from('notes').insert([newNote]);
-        }
+        await supabase.from('notes').insert([newNoteDB]);
       }
       if (session) fetchNotes(session.user.id);
     } catch (err) {
@@ -337,9 +356,9 @@ export default function App() {
           <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mr-1">Text Color:</span>
           {TEXT_COLORS.map((c) => (
             <button
-              key={c.name}
-              onClick={() => setActiveNote({ ...activeNote, color: c.value })}
-              className={`w-6 h-6 rounded-full ${c.badge} border-2 transition ${activeNote.color === c.value ? 'scale-125 border-black dark:border-white shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
+              key={c.id}
+              onClick={() => setActiveNote({ ...activeNote, colorClass: c.value })}
+              className={`w-6 h-6 rounded-full ${c.badge} border-2 transition ${activeNote.colorClass === c.value ? 'scale-125 border-black dark:border-white shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
               title={c.name}
             />
           ))}
@@ -362,7 +381,7 @@ export default function App() {
             placeholder="Start typing your note..."
             value={activeNote.content || ''}
             onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })}
-            className={`w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none bg-transparent ${activeNote.color || 'text-gray-900 dark:text-white'}`}
+            className={`w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none bg-transparent ${activeNote.colorClass || 'text-gray-900 dark:text-white'}`}
           />
         </div>
       </div>
@@ -468,7 +487,7 @@ export default function App() {
                 </div>
               </div>
               
-              <p className={`text-sm line-clamp-2 leading-relaxed whitespace-pre-line font-medium ${note.color || 'opacity-70'}`}>
+              <p className={`text-sm line-clamp-2 leading-relaxed whitespace-pre-line font-medium ${note.colorClass || 'opacity-70'}`}>
                 {note.content && note.content.trim() ? note.content : 'No detailed body text entered.'}
               </p>
             </div>
@@ -564,7 +583,7 @@ export default function App() {
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
                   <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v3.5</p>
+                  <p><strong>Version:</strong> CloudNotes v3.6</p>
                 </div>
               </div>
 
