@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
   Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff,
-  Palette, Info, List, ListOrdered, KeyRound, Sparkles, Code, Globe, LockKeyhole
+  Palette, Info, List, ListOrdered, KeyRound, Sparkles, Code, LockKeyhole
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
@@ -18,7 +18,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [theme, setTheme] = useState('light'); // 'light', 'dark', 'amber'
+  const [theme, setTheme] = useState('light');
 
   // Security & PIN state
   const [appPin, setAppPin] = useState(localStorage.getItem('cloudnotes_pin') || '');
@@ -57,15 +57,9 @@ export default function App() {
       const { data, error } = await supabase
         .from('notes')
         .select('*')
-        .eq('user_id', userId)
         .order('id', { ascending: false });
 
-      if (error) {
-        const { data: allNotes } = await supabase.from('notes').select('*').order('id', { ascending: false });
-        if (allNotes) setNotes(allNotes);
-      } else if (data) {
-        setNotes(data);
-      }
+      if (data) setNotes(data);
     } catch (err) {
       console.error('Error fetching notes:', err);
     } finally {
@@ -107,35 +101,51 @@ export default function App() {
       return;
     }
 
-    try {
-      const payload = {
-        title: activeNote.title,
-        content: activeNote.content,
-        is_locked: activeNote.is_locked || false,
-        user_id: session?.user?.id
-      };
+    const newNote = {
+      title: activeNote.title || '',
+      content: activeNote.content || '',
+      is_locked: activeNote.is_locked || false,
+      user_id: session?.user?.id
+    };
 
+    // Immediate local state update (Fixes missing note display)
+    if (activeNote.id) {
+      setNotes(notes.map(n => n.id === activeNote.id ? { ...n, ...newNote } : n));
+    } else {
+      setNotes([{ ...newNote, id: Date.now() }, ...notes]);
+    }
+
+    setActiveNote(null);
+
+    try {
       if (activeNote.id) {
-        await supabase.from('notes').update(payload).eq('id', activeNote.id);
+        const { error } = await supabase.from('notes').update(newNote).eq('id', activeNote.id);
+        if (error) {
+          // Fallback if is_locked column doesn't exist in Supabase schema yet
+          delete newNote.is_locked;
+          await supabase.from('notes').update(newNote).eq('id', activeNote.id);
+        }
       } else {
-        await supabase.from('notes').insert([payload]);
+        const { error } = await supabase.from('notes').insert([newNote]);
+        if (error) {
+          delete newNote.is_locked;
+          await supabase.from('notes').insert([newNote]);
+        }
       }
-      if (session) await fetchNotes(session.user.id);
+      if (session) fetchNotes(session.user.id);
     } catch (err) {
       console.error('Error saving note:', err);
-    } finally {
-      setActiveNote(null);
     }
   };
 
   const handleDelete = async (id) => {
+    setNotes(notes.filter(n => n.id !== id));
+    setActiveNote(null);
     try {
       await supabase.from('notes').delete().eq('id', id);
-      if (session) await fetchNotes(session.user.id);
+      if (session) fetchNotes(session.user.id);
     } catch (err) {
       console.error('Error deleting note:', err);
-    } finally {
-      if (activeNote?.id === id) setActiveNote(null);
     }
   };
 
@@ -180,7 +190,6 @@ export default function App() {
     }
   };
 
-  // Modern Theme Styling Rules
   const themeClasses = {
     light: 'bg-[#F4F5F9] text-gray-900',
     dark: 'bg-[#121214] text-white',
@@ -188,7 +197,7 @@ export default function App() {
   }[theme];
 
   const cardClasses = {
-    light: 'bg-white border-gray-100/80 text-gray-800 shadow-sm hover:shadow-md',
+    light: 'bg-white border-gray-100 text-gray-800 shadow-sm hover:shadow-md',
     dark: 'bg-[#1E1E22] border-gray-800 text-gray-100 shadow-sm hover:shadow-md',
     amber: 'bg-[#FFFDF7] border-amber-200/60 text-[#4A3B2C] shadow-sm hover:shadow-md'
   }[theme];
@@ -284,7 +293,6 @@ export default function App() {
             <ArrowLeft size={24} />
           </button>
           
-          {/* List Formatting & Security Toolbar */}
           <div className="flex items-center gap-1.5 bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-2xl">
             <button 
               onClick={() => insertList('ordered')} 
@@ -359,7 +367,6 @@ export default function App() {
   // MAIN HOMESCREEN
   return (
     <div className={`min-h-screen ${themeClasses} flex flex-col font-sans relative pb-24 transition-colors`}>
-      {/* MIUI Header Bar */}
       <header className="px-6 pt-7 pb-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-amber-400 text-white rounded-xl flex items-center justify-center shadow-md shadow-amber-400/20">
@@ -377,7 +384,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Modern MIUI Search Input */}
       <div className="px-6 my-3">
         <div className={`flex items-center ${cardClasses} px-4 py-3 rounded-2xl border`}>
           <Search size={18} className="text-gray-400 mr-2.5" />
@@ -396,7 +402,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Folder & Filter Category Pills */}
       <div className="px-6 my-2 flex items-center gap-2">
         <span className="px-4 py-1.5 text-xs bg-amber-400 text-white font-bold rounded-xl shadow-sm shadow-amber-400/30">
           All ({notes.length})
@@ -406,7 +411,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* Notes Grid Display */}
       <main className="px-6 flex-1 max-w-2xl mx-auto w-full space-y-3.5 mt-2">
         {loading ? (
           <div className="text-center py-24 text-gray-400 text-sm font-medium">Loading your notes...</div>
@@ -440,7 +444,6 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Action Button */}
       <button
         onClick={handleCreateNew}
         className="fixed bottom-8 right-6 w-14 h-14 bg-gradient-to-tr from-amber-400 to-amber-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-amber-400/40 hover:scale-105 transition active:scale-95"
@@ -448,7 +451,6 @@ export default function App() {
         <Plus size={30} strokeWidth={2.5} />
       </button>
 
-      {/* PIN PROMPT MODAL */}
       {pinPrompt.open && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white text-gray-900 w-full max-w-xs rounded-3xl p-6 shadow-2xl text-center relative">
@@ -489,7 +491,6 @@ export default function App() {
         </div>
       )}
 
-      {/* PROFILE MODAL */}
       {showProfile && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white text-gray-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl relative">
@@ -521,7 +522,6 @@ export default function App() {
         </div>
       )}
 
-      {/* SETTINGS MODAL */}
       {showSettings && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white text-gray-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -533,7 +533,6 @@ export default function App() {
             </div>
 
             <div className="space-y-5">
-              {/* Theme Picker */}
               <div>
                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">App Theme</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -558,7 +557,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* PIN Security Config */}
               <div>
                 <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">4-Digit Security PIN</label>
                 <div className="flex gap-2">
@@ -579,7 +577,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Developer Info Section */}
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-100 space-y-2">
                 <div className="flex items-center gap-2 text-amber-800">
                   <Code size={18} className="text-amber-500" />
@@ -588,7 +585,7 @@ export default function App() {
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
                   <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v2.5 (MIUI Edition)</p>
+                  <p><strong>Version:</strong> CloudNotes v2.5</p>
                 </div>
               </div>
 
