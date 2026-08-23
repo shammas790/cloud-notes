@@ -2,13 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
-  Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff,
-  Palette, List, ListOrdered, KeyRound, Sparkles, Code, LockKeyhole, Star, Copy, Download
+  Folder, Settings, FileText, Search, X, LogOut, Shield, Mail, Eye, EyeOff,
+  Palette, List, ListOrdered, Sparkles, Code, Star, Copy, Download
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pzrzNMFnf6L_Y4zbIcZ1hA_32vgbJMH';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+const TEXT_COLORS = [
+  { name: 'Default', value: 'text-gray-900 dark:text-white', badge: 'bg-gray-800' },
+  { name: 'Red', value: 'text-red-500 font-semibold', badge: 'bg-red-500' },
+  { name: 'Blue', value: 'text-blue-500 font-semibold', badge: 'bg-blue-500' },
+  { name: 'Green', value: 'text-green-500 font-semibold', badge: 'bg-green-500' },
+  { name: 'Yellow', value: 'text-yellow-500 font-semibold', badge: 'bg-yellow-500' },
+  { name: 'Purple', value: 'text-purple-500 font-semibold', badge: 'bg-purple-500' },
+  { name: 'Orange', value: 'text-orange-500 font-semibold', badge: 'bg-orange-500' },
+  { name: 'Rainbow', value: 'bg-gradient-to-r from-red-500 via-green-500 via-blue-500 to-purple-500 bg-clip-text text-transparent font-black', badge: 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500' }
+];
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -20,11 +31,6 @@ export default function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [theme, setTheme] = useState('light');
   const [copiedId, setCopiedId] = useState(null);
-
-  // Security & PIN state
-  const [appPin, setAppPin] = useState(localStorage.getItem('cloudnotes_pin') || '');
-  const [newPinInput, setNewPinInput] = useState('');
-  const [pinPrompt, setPinPrompt] = useState({ open: false, noteToOpen: null, inputPin: '', error: false });
 
   // Auth States
   const [isSignUp, setIsSignUp] = useState(false);
@@ -92,7 +98,7 @@ export default function App() {
   };
 
   const handleCreateNew = () => {
-    setActiveNote({ title: '', content: '', is_locked: false, is_starred: false });
+    setActiveNote({ title: '', content: '', color: 'text-gray-900 dark:text-white', is_starred: false });
   };
 
   const handleSave = async () => {
@@ -105,7 +111,7 @@ export default function App() {
     const newNote = {
       title: activeNote.title || '',
       content: activeNote.content || '',
-      is_locked: activeNote.is_locked || false,
+      color: activeNote.color || 'text-gray-900 dark:text-white',
       is_starred: activeNote.is_starred || false,
       user_id: session?.user?.id
     };
@@ -122,14 +128,14 @@ export default function App() {
       if (activeNote.id) {
         const { error } = await supabase.from('notes').update(newNote).eq('id', activeNote.id);
         if (error) {
-          delete newNote.is_locked;
+          delete newNote.color;
           delete newNote.is_starred;
           await supabase.from('notes').update(newNote).eq('id', activeNote.id);
         }
       } else {
         const { error } = await supabase.from('notes').insert([newNote]);
         if (error) {
-          delete newNote.is_locked;
+          delete newNote.color;
           delete newNote.is_starred;
           await supabase.from('notes').insert([newNote]);
         }
@@ -187,39 +193,6 @@ export default function App() {
     setActiveNote({ ...activeNote, content: updated });
   };
 
-  const handleSetPin = () => {
-    if (newPinInput.length === 4) {
-      localStorage.setItem('cloudnotes_pin', newPinInput);
-      setAppPin(newPinInput);
-      setNewPinInput('');
-      alert('Security PIN updated successfully!');
-    } else {
-      alert('Please enter a 4-digit PIN');
-    }
-  };
-
-  const openNoteWithCheck = (note) => {
-    if (note.is_locked) {
-      if (!appPin) {
-        alert('Please set up a 4-digit Security PIN in Settings first!');
-        setShowSettings(true);
-        return;
-      }
-      setPinPrompt({ open: true, noteToOpen: note, inputPin: '', error: false });
-    } else {
-      setActiveNote(note);
-    }
-  };
-
-  const verifyPinAndOpen = () => {
-    if (pinPrompt.inputPin === appPin) {
-      setActiveNote(pinPrompt.noteToOpen);
-      setPinPrompt({ open: false, noteToOpen: null, inputPin: '', error: false });
-    } else {
-      setPinPrompt({ ...pinPrompt, error: true });
-    }
-  };
-
   const themeClasses = {
     light: 'bg-[#F4F5F9] text-gray-900',
     dark: 'bg-[#121214] text-white',
@@ -267,7 +240,6 @@ export default function App() {
             </div>
 
             <div className="flex items-center bg-gray-100/80 px-3.5 py-3 rounded-2xl border border-gray-200/50 focus-within:ring-2 focus-within:ring-amber-400 transition">
-              <Lock size={18} className="text-gray-400 mr-2.5" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Password"
@@ -346,13 +318,6 @@ export default function App() {
             >
               <Star size={18} />
             </button>
-            <button 
-              onClick={() => setActiveNote({ ...activeNote, is_locked: !activeNote.is_locked })} 
-              title={activeNote.is_locked ? "Unlock Note" : "Lock Note with PIN"}
-              className={`p-1.5 rounded-xl transition ${activeNote.is_locked ? 'bg-amber-400 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700'}`}
-            >
-              <LockKeyhole size={18} />
-            </button>
           </div>
 
           <div className="flex items-center gap-1">
@@ -367,7 +332,20 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex-1 px-6 pt-5 pb-6 flex flex-col max-w-2xl mx-auto w-full">
+        {/* Color Palette Bar */}
+        <div className="flex items-center gap-2 px-6 pt-4 overflow-x-auto pb-1">
+          <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mr-1">Text Color:</span>
+          {TEXT_COLORS.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => setActiveNote({ ...activeNote, color: c.value })}
+              className={`w-6 h-6 rounded-full ${c.badge} border-2 transition ${activeNote.color === c.value ? 'scale-125 border-black dark:border-white shadow-md' : 'border-transparent opacity-80 hover:opacity-100'}`}
+              title={c.name}
+            />
+          ))}
+        </div>
+
+        <div className="flex-1 px-6 pt-4 pb-6 flex flex-col max-w-2xl mx-auto w-full">
           <input
             type="text"
             placeholder="Title"
@@ -379,17 +357,12 @@ export default function App() {
             <span>{formattedDate}</span>
             <span>•</span>
             <span>{charCount} characters</span>
-            {activeNote.is_locked && (
-              <span className="ml-auto bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                <LockKeyhole size={10} /> PIN Locked
-              </span>
-            )}
           </div>
           <textarea
-            placeholder="Start typing your safe note..."
+            placeholder="Start typing your note..."
             value={activeNote.content || ''}
             onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })}
-            className={`w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none bg-transparent ${theme === 'dark' ? 'text-white' : 'text-black'}`}
+            className={`w-full flex-1 text-base leading-relaxed placeholder-gray-300 border-none outline-none resize-none bg-transparent ${activeNote.color || 'text-gray-900 dark:text-white'}`}
           />
         </div>
       </div>
@@ -461,7 +434,7 @@ export default function App() {
           filteredNotes.map((note) => (
             <div
               key={note.id}
-              onClick={() => openNoteWithCheck(note)}
+              onClick={() => setActiveNote(note)}
               className={`${cardClasses} p-4 rounded-2xl transition-all cursor-pointer border relative group overflow-hidden`}
             >
               <div className="flex items-center justify-between mb-1.5">
@@ -477,7 +450,7 @@ export default function App() {
                 </div>
                 
                 <div className="flex items-center gap-1.5">
-                  {!note.is_locked && note.content && (
+                  {note.content && (
                     <button 
                       onClick={(e) => copyToClipboard(e, note.content, note.id)} 
                       title="Copy note content"
@@ -492,18 +465,11 @@ export default function App() {
                   >
                     <Star size={14} fill={note.is_starred ? "currentColor" : "none"} />
                   </button>
-                  {note.is_locked && (
-                    <span className="text-amber-500 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded-lg">
-                      <LockKeyhole size={14} />
-                    </span>
-                  )}
                 </div>
               </div>
               
-              <p className="text-sm opacity-70 line-clamp-2 leading-relaxed whitespace-pre-line font-normal">
-                {note.is_locked 
-                  ? '🔒 Locked content. Tap to enter PIN.' 
-                  : (note.content && note.content.trim() ? note.content : 'No detailed body text entered.')}
+              <p className={`text-sm line-clamp-2 leading-relaxed whitespace-pre-line font-medium ${note.color || 'opacity-70'}`}>
+                {note.content && note.content.trim() ? note.content : 'No detailed body text entered.'}
               </p>
             </div>
           ))
@@ -516,46 +482,6 @@ export default function App() {
       >
         <Plus size={30} strokeWidth={2.5} />
       </button>
-
-      {pinPrompt.open && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white text-gray-900 w-full max-w-xs rounded-3xl p-6 shadow-2xl text-center relative">
-            <div className="w-12 h-12 bg-amber-100 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-3">
-              <KeyRound size={24} />
-            </div>
-            <h3 className="text-lg font-bold">Protected Note</h3>
-            <p className="text-xs text-gray-400 mt-0.5 mb-4">Enter your 4-digit security PIN</p>
-
-            <input
-              type="password"
-              maxLength={4}
-              value={pinPrompt.inputPin}
-              onChange={(e) => setPinPrompt({ ...pinPrompt, inputPin: e.target.value, error: false })}
-              className="w-full text-center text-2xl tracking-[0.5em] font-mono py-2.5 bg-gray-100 rounded-2xl mb-3 border border-gray-200 outline-none focus:ring-2 focus:ring-amber-400"
-              placeholder="••••"
-            />
-
-            {pinPrompt.error && (
-              <p className="text-xs text-red-500 font-semibold mb-3">Incorrect PIN. Try again.</p>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPinPrompt({ open: false, noteToOpen: null, inputPin: '', error: false })}
-                className="flex-1 py-2.5 bg-gray-100 text-gray-700 font-bold text-xs rounded-xl hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={verifyPinAndOpen}
-                className="flex-1 py-2.5 bg-amber-400 text-white font-bold text-xs rounded-xl shadow-md hover:bg-amber-500"
-              >
-                Unlock
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showProfile && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -592,7 +518,7 @@ export default function App() {
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white text-gray-900 w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-gray-800">Settings & Security</h2>
+              <h2 className="text-lg font-bold text-gray-800">Settings</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
@@ -623,26 +549,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block mb-2">4-Digit Security PIN</label>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    maxLength={4}
-                    placeholder={appPin ? "•••• (PIN Active)" : "Set 4-Digit PIN"}
-                    value={newPinInput}
-                    onChange={(e) => setNewPinInput(e.target.value)}
-                    className="flex-1 bg-gray-50 px-3.5 py-2.5 rounded-2xl border border-gray-200 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <button
-                    onClick={handleSetPin}
-                    className="px-4 py-2.5 bg-amber-400 text-white font-bold text-xs rounded-2xl shadow-md hover:bg-amber-500 transition"
-                  >
-                    Save PIN
-                  </button>
-                </div>
-              </div>
-
               <button
                 onClick={exportNotes}
                 className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-2xl border border-gray-200 flex items-center justify-center gap-2 transition"
@@ -658,14 +564,14 @@ export default function App() {
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
                   <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v3.0</p>
+                  <p><strong>Version:</strong> CloudNotes v3.5</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="flex items-center gap-3">
                   <Shield size={20} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Cloud Sync & Encryption</span>
+                  <span className="text-sm font-medium text-gray-700">Cloud Sync</span>
                 </div>
                 <span className="text-xs text-green-500 font-bold">Active</span>
               </div>
