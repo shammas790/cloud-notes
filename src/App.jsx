@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
   Folder, Settings, FileText, Search, X, LogOut, Shield, Lock, Mail, Eye, EyeOff,
-  Palette, Info, List, ListOrdered, KeyRound, Sparkles, Code, LockKeyhole
+  Palette, List, ListOrdered, KeyRound, Sparkles, Code, LockKeyhole, Star, Copy, Download
 } from 'lucide-react';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
@@ -19,6 +19,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [theme, setTheme] = useState('light');
+  const [copiedId, setCopiedId] = useState(null);
 
   // Security & PIN state
   const [appPin, setAppPin] = useState(localStorage.getItem('cloudnotes_pin') || '');
@@ -74,7 +75,7 @@ export default function App() {
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        alert('Check your email for confirmation!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -91,7 +92,7 @@ export default function App() {
   };
 
   const handleCreateNew = () => {
-    setActiveNote({ title: '', content: '', is_locked: false });
+    setActiveNote({ title: '', content: '', is_locked: false, is_starred: false });
   };
 
   const handleSave = async () => {
@@ -105,10 +106,10 @@ export default function App() {
       title: activeNote.title || '',
       content: activeNote.content || '',
       is_locked: activeNote.is_locked || false,
+      is_starred: activeNote.is_starred || false,
       user_id: session?.user?.id
     };
 
-    // Immediate local state update (Fixes missing note display)
     if (activeNote.id) {
       setNotes(notes.map(n => n.id === activeNote.id ? { ...n, ...newNote } : n));
     } else {
@@ -121,14 +122,15 @@ export default function App() {
       if (activeNote.id) {
         const { error } = await supabase.from('notes').update(newNote).eq('id', activeNote.id);
         if (error) {
-          // Fallback if is_locked column doesn't exist in Supabase schema yet
           delete newNote.is_locked;
+          delete newNote.is_starred;
           await supabase.from('notes').update(newNote).eq('id', activeNote.id);
         }
       } else {
         const { error } = await supabase.from('notes').insert([newNote]);
         if (error) {
           delete newNote.is_locked;
+          delete newNote.is_starred;
           await supabase.from('notes').insert([newNote]);
         }
       }
@@ -147,6 +149,34 @@ export default function App() {
     } catch (err) {
       console.error('Error deleting note:', err);
     }
+  };
+
+  const toggleStarNote = async (e, note) => {
+    e.stopPropagation();
+    const updated = notes.map(n => n.id === note.id ? { ...n, is_starred: !n.is_starred } : n);
+    setNotes(updated);
+    try {
+      await supabase.from('notes').update({ is_starred: !note.is_starred }).eq('id', note.id);
+    } catch (err) {
+      console.error('Error starring note:', err);
+    }
+  };
+
+  const copyToClipboard = (e, text, id) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const exportNotes = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `CloudNotes_Backup_${new Date().toISOString().slice(0, 10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
 
   const insertList = (type) => {
@@ -171,7 +201,7 @@ export default function App() {
   const openNoteWithCheck = (note) => {
     if (note.is_locked) {
       if (!appPin) {
-        alert('Please set up a Security PIN in Settings first!');
+        alert('Please set up a 4-digit Security PIN in Settings first!');
         setShowSettings(true);
         return;
       }
@@ -202,7 +232,7 @@ export default function App() {
     amber: 'bg-[#FFFDF7] border-amber-200/60 text-[#4A3B2C] shadow-sm hover:shadow-md'
   }[theme];
 
-  // LOGIN / SIGNUP SCREEN
+  // LOGIN SCREEN
   if (!session) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-gray-100 to-amber-100/50 flex items-center justify-center p-4 font-sans">
@@ -310,6 +340,13 @@ export default function App() {
             </button>
             <div className="w-[1px] h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
             <button 
+              onClick={() => setActiveNote({ ...activeNote, is_starred: !activeNote.is_starred })} 
+              title={activeNote.is_starred ? "Unpin Note" : "Pin Note to Top"}
+              className={`p-1.5 rounded-xl transition ${activeNote.is_starred ? 'bg-amber-400 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700'}`}
+            >
+              <Star size={18} />
+            </button>
+            <button 
               onClick={() => setActiveNote({ ...activeNote, is_locked: !activeNote.is_locked })} 
               title={activeNote.is_locked ? "Unlock Note" : "Lock Note with PIN"}
               className={`p-1.5 rounded-xl transition ${activeNote.is_locked ? 'bg-amber-400 text-white' : 'text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700'}`}
@@ -359,10 +396,12 @@ export default function App() {
     );
   }
 
-  const filteredNotes = notes.filter(n => 
-    (n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (n.content || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredNotes = notes
+    .filter(n => 
+      (n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (n.content || '').toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => (b.is_starred ? 1 : 0) - (a.is_starred ? 1 : 0));
 
   // MAIN HOMESCREEN
   return (
@@ -425,19 +464,46 @@ export default function App() {
               onClick={() => openNoteWithCheck(note)}
               className={`${cardClasses} p-4 rounded-2xl transition-all cursor-pointer border relative group overflow-hidden`}
             >
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-base font-bold truncate pr-6">
-                  {note.title || 'Untitled'}
-                </h3>
-                {note.is_locked && (
-                  <span className="text-amber-500 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded-lg">
-                    <LockKeyhole size={14} />
-                  </span>
-                )}
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2 flex-1 pr-2">
+                  <h3 className="text-base font-bold truncate">
+                    {note.title || 'Untitled Note'}
+                  </h3>
+                  {note.is_starred && (
+                    <span className="text-amber-500">
+                      <Star size={14} fill="currentColor" />
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  {!note.is_locked && note.content && (
+                    <button 
+                      onClick={(e) => copyToClipboard(e, note.content, note.id)} 
+                      title="Copy note content"
+                      className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-400 hover:text-amber-500 transition"
+                    >
+                      {copiedId === note.id ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                    </button>
+                  )}
+                  <button 
+                    onClick={(e) => toggleStarNote(e, note)} 
+                    className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-gray-400 hover:text-amber-500 transition"
+                  >
+                    <Star size={14} fill={note.is_starred ? "currentColor" : "none"} />
+                  </button>
+                  {note.is_locked && (
+                    <span className="text-amber-500 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded-lg">
+                      <LockKeyhole size={14} />
+                    </span>
+                  )}
+                </div>
               </div>
               
               <p className="text-sm opacity-70 line-clamp-2 leading-relaxed whitespace-pre-line font-normal">
-                {note.is_locked ? '🔒 Locked content. Tap to enter PIN.' : (note.content || 'No content')}
+                {note.is_locked 
+                  ? '🔒 Locked content. Tap to enter PIN.' 
+                  : (note.content && note.content.trim() ? note.content : 'No detailed body text entered.')}
               </p>
             </div>
           ))
@@ -577,6 +643,13 @@ export default function App() {
                 </div>
               </div>
 
+              <button
+                onClick={exportNotes}
+                className="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold text-xs rounded-2xl border border-gray-200 flex items-center justify-center gap-2 transition"
+              >
+                <Download size={16} /> Backup & Export Notes
+              </button>
+
               <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-100 space-y-2">
                 <div className="flex items-center gap-2 text-amber-800">
                   <Code size={18} className="text-amber-500" />
@@ -585,7 +658,7 @@ export default function App() {
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
                   <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v2.5</p>
+                  <p><strong>Version:</strong> CloudNotes v3.0</p>
                 </div>
               </div>
 
