@@ -1,14 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { 
   Plus, ArrowLeft, Check, Trash2, User, 
   Folder, Settings, FileText, Search, X, LogOut, Shield, Mail, Eye, EyeOff,
   Palette, List, ListOrdered, Sparkles, Code, Star, Copy, Download
 } from 'lucide-react';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://bbkmgratduoeszfmliwt.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_pzrzNMFnf6L_Y4zbIcZ1hA_32vgbJMH';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const TEXT_COLORS = [
   { id: 'default', name: 'Default', value: 'text-gray-900 dark:text-white', badge: 'bg-gray-800' },
@@ -18,14 +13,24 @@ const TEXT_COLORS = [
   { id: 'yellow', name: 'Yellow', value: 'text-yellow-500 font-semibold', badge: 'bg-yellow-500' },
   { id: 'purple', name: 'Purple', value: 'text-purple-500 font-semibold', badge: 'bg-purple-500' },
   { id: 'orange', name: 'Orange', value: 'text-orange-500 font-semibold', badge: 'bg-orange-500' },
-  { id: 'rainbow', name: 'Rainbow', value: 'bg-gradient-to-r from-red-500 via-green-500 via-blue-500 to-purple-500 bg-clip-text text-transparent font-black', badge: 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500' }
+  { id: 'rainbow', name: 'Rainbow', value: 'bg-gradient-to-r from-red-500 via-green-500 via-blue-500 to-purple-500 bg-clip-text text-transparent font-black', badge: 'bg-gradient-to-r from-red-500 via-yellow-500 via-blue-500 to-purple-500' }
 ];
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [notes, setNotes] = useState([]);
+  const [session, setSession] = useState(() => {
+    const saved = localStorage.getItem('cloudnotes_session');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [notes, setNotes] = useState(() => {
+    const saved = localStorage.getItem('cloudnotes_data');
+    return saved ? JSON.parse(saved) : [
+      { id: 1, title: 'Git hub account', content: 'Password :1shammas789\nUsername : shammas790', colorClass: 'text-purple-500 font-semibold', is_starred: true },
+      { id: 2, title: 'Email accounts', content: 'Email : personmawk@gmail.com\nPassword : 1abcdef789...', colorClass: 'text-gray-900 dark:text-white', is_starred: false },
+      { id: 3, title: 'Microsoft account', content: 'Email : cvshammas7@gmail.com\nPassword : 1abcdef789', colorClass: 'text-gray-900 dark:text-white', is_starred: false }
+    ];
+  });
   const [activeNote, setActiveNote] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -34,8 +39,8 @@ export default function App() {
 
   // Auth States
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('personmawk@gmail.com');
+  const [password, setPassword] = useState('12345678');
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
 
@@ -44,94 +49,35 @@ export default function App() {
   const [selectedGoogleAccount, setSelectedGoogleAccount] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) fetchNotes(session.user.id);
-      else setLoading(false);
-    });
+    localStorage.setItem('cloudnotes_data', JSON.stringify(notes));
+  }, [notes]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) fetchNotes(session.user.id);
-      else {
-        setNotes([]);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const parseNoteData = (note) => {
-    let colorClass = 'text-gray-900 dark:text-white';
-    let content = note.content || '';
-
-    if (content.startsWith('<!--COLOR:')) {
-      const parts = content.split('-->');
-      const colorId = parts[0].replace('<!--COLOR:', '');
-      const foundColor = TEXT_COLORS.find(c => c.id === colorId);
-      if (foundColor) colorClass = foundColor.value;
-      content = parts.slice(1).join('-->');
-    } else if (note.color) {
-      colorClass = note.color;
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem('cloudnotes_session', JSON.stringify(session));
+    } else {
+      localStorage.removeItem('cloudnotes_session');
     }
+  }, [session]);
 
-    return { ...note, content, colorClass };
-  };
-
-  const fetchNotes = async (userId) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('notes')
-        .select('*')
-        .order('id', { ascending: false });
-
-      if (data) {
-        const parsed = data.map(parseNoteData);
-        setNotes(parsed);
-      }
-    } catch (err) {
-      console.error('Error fetching notes:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAuth = async (e) => {
+  const handleAuth = (e) => {
     e.preventDefault();
     setAuthError('');
-    try {
-      if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        alert('Check your email for confirmation!');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+    const userSession = {
+      user: {
+        id: 'user-' + Date.now(),
+        email: email || 'shammas@gmail.com'
       }
-    } catch (err) {
-      setAuthError(err.message);
-    }
+    };
+    setSession(userSession);
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin
-        }
-      });
-      if (error) throw error;
-    } catch (err) {
-      // Fallback modal simulation if Supabase OAuth isn't configured in dashboard
-      setShowGoogleModal(true);
-    }
+  const handleGoogleSignIn = () => {
+    setShowGoogleModal(true);
   };
 
   const handleGoogleContinue = () => {
-    const account = selectedGoogleAccount || { email: 'shammas@gmail.com', name: 'Shammas' };
+    const account = selectedGoogleAccount || { email: 'shammas790@gmail.com', name: 'Shammas' };
     const mockSession = {
       user: {
         id: 'google-user-' + Date.now(),
@@ -141,11 +87,9 @@ export default function App() {
     };
     setSession(mockSession);
     setShowGoogleModal(false);
-    fetchNotes(mockSession.user.id);
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  const handleLogout = () => {
     setSession(null);
     setShowProfile(false);
     setShowSettings(false);
@@ -155,24 +99,14 @@ export default function App() {
     setActiveNote({ title: '', content: '', colorClass: 'text-gray-900 dark:text-white', is_starred: false });
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!activeNote) return;
     if (!activeNote.title?.trim() && !activeNote.content?.trim()) {
       setActiveNote(null);
       return;
     }
 
-    const selectedColorObj = TEXT_COLORS.find(c => c.value === activeNote.colorClass) || TEXT_COLORS[0];
-    const encodedContent = `<!--COLOR:${selectedColorObj.id}-->${activeNote.content || ''}`;
-
-    const newNoteDB = {
-      title: activeNote.title || '',
-      content: encodedContent,
-      is_starred: activeNote.is_starred || false,
-      user_id: session?.user?.id
-    };
-
-    const newNoteUI = {
+    const newNote = {
       ...activeNote,
       content: activeNote.content || '',
       colorClass: activeNote.colorClass || 'text-gray-900 dark:text-white',
@@ -180,45 +114,22 @@ export default function App() {
     };
 
     if (activeNote.id) {
-      setNotes(notes.map(n => n.id === activeNote.id ? newNoteUI : n));
+      setNotes(notes.map(n => n.id === activeNote.id ? newNote : n));
     } else {
-      setNotes([newNoteUI, ...notes]);
+      setNotes([newNote, ...notes]);
     }
 
     setActiveNote(null);
-
-    try {
-      if (activeNote.id) {
-        await supabase.from('notes').update(newNoteDB).eq('id', activeNote.id);
-      } else {
-        await supabase.from('notes').insert([newNoteDB]);
-      }
-      if (session) fetchNotes(session.user.id);
-    } catch (err) {
-      console.error('Error saving note:', err);
-    }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = (id) => {
     setNotes(notes.filter(n => n.id !== id));
     setActiveNote(null);
-    try {
-      await supabase.from('notes').delete().eq('id', id);
-      if (session) fetchNotes(session.user.id);
-    } catch (err) {
-      console.error('Error deleting note:', err);
-    }
   };
 
-  const toggleStarNote = async (e, note) => {
+  const toggleStarNote = (e, note) => {
     e.stopPropagation();
-    const updated = notes.map(n => n.id === note.id ? { ...n, is_starred: !n.is_starred } : n);
-    setNotes(updated);
-    try {
-      await supabase.from('notes').update({ is_starred: !note.is_starred }).eq('id', note.id);
-    } catch (err) {
-      console.error('Error starring note:', err);
-    }
+    setNotes(notes.map(n => n.id === note.id ? { ...n, is_starred: !n.is_starred } : n));
   };
 
   const copyToClipboard = (e, text, id) => {
@@ -693,17 +604,17 @@ export default function App() {
                 </div>
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
-                  <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v3.7</p>
+                  <p><strong>Stack:</strong> React, Tailwind CSS, Local Storage</p>
+                  <p><strong>Version:</strong> CloudNotes v3.8</p>
                 </div>
               </div>
 
               <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
                 <div className="flex items-center gap-3">
                   <Shield size={20} className="text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">Cloud Sync</span>
+                  <span className="text-sm font-medium text-gray-700">Storage</span>
                 </div>
-                <span className="text-xs text-green-500 font-bold">Active</span>
+                <span className="text-xs text-green-500 font-bold">Offline Ready</span>
               </div>
             </div>
 
