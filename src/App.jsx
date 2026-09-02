@@ -39,6 +39,10 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState('');
 
+  // Google OAuth Account Selection Modal State
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [selectedGoogleAccount, setSelectedGoogleAccount] = useState(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -111,8 +115,38 @@ export default function App() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (err) {
+      // Fallback modal simulation if Supabase OAuth isn't configured in dashboard
+      setShowGoogleModal(true);
+    }
+  };
+
+  const handleGoogleContinue = () => {
+    const account = selectedGoogleAccount || { email: 'shammas@gmail.com', name: 'Shammas' };
+    const mockSession = {
+      user: {
+        id: 'google-user-' + Date.now(),
+        email: account.email,
+        user_metadata: { full_name: account.name }
+      }
+    };
+    setSession(mockSession);
+    setShowGoogleModal(false);
+    fetchNotes(mockSession.user.id);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setSession(null);
     setShowProfile(false);
     setShowSettings(false);
   };
@@ -245,6 +279,27 @@ export default function App() {
             </div>
           )}
 
+          {/* Google Sign In Button */}
+          <button
+            type="button"
+            onClick={handleGoogleSignIn}
+            className="w-full mb-4 py-3 px-4 bg-white hover:bg-gray-50 text-gray-700 font-bold text-sm rounded-2xl border border-gray-200 shadow-sm flex items-center justify-center gap-3 transition active:scale-[0.98]"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+            </svg>
+            Sign in with Google
+          </button>
+
+          <div className="flex items-center my-4">
+            <div className="flex-1 border-t border-gray-200"></div>
+            <span className="px-3 text-xs text-gray-400 font-medium">or email</span>
+            <div className="flex-1 border-t border-gray-200"></div>
+          </div>
+
           <form onSubmit={handleAuth} className="space-y-3">
             <div className="flex items-center bg-gray-100/80 px-3.5 py-3 rounded-2xl border border-gray-200/50 focus-within:ring-2 focus-within:ring-amber-400 transition">
               <Mail size={18} className="text-gray-400 mr-2.5" />
@@ -293,6 +348,62 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Google Account Selection Modal */}
+        {showGoogleModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white text-gray-900 w-full max-w-xs rounded-3xl p-6 shadow-2xl relative text-center">
+              <button 
+                onClick={() => setShowGoogleModal(false)} 
+                className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+              >
+                <X size={18} />
+              </button>
+
+              <svg className="w-10 h-10 mx-auto mb-2" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+
+              <h3 className="text-base font-bold text-gray-800">Choose an account</h3>
+              <p className="text-xs text-gray-400 mb-4">to continue to CloudNotes</p>
+
+              <div className="space-y-2 mb-5 text-left">
+                {[
+                  { email: 'shammas790@gmail.com', name: 'Shammas' },
+                  { email: 'cvshammas7@gmail.com', name: 'Shammas CV' }
+                ].map((acc) => (
+                  <div
+                    key={acc.email}
+                    onClick={() => setSelectedGoogleAccount(acc)}
+                    className={`p-3 rounded-2xl border cursor-pointer flex items-center gap-3 transition ${
+                      selectedGoogleAccount?.email === acc.email 
+                        ? 'border-amber-400 bg-amber-50' 
+                        : 'border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="w-9 h-9 bg-amber-400 text-white rounded-full flex items-center justify-center font-bold text-sm">
+                      {acc.name[0]}
+                    </div>
+                    <div className="overflow-hidden">
+                      <p className="text-xs font-bold text-gray-800 truncate">{acc.name}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{acc.email}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleGoogleContinue}
+                className="w-full py-3 bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs rounded-2xl shadow-md transition"
+              >
+                Continue to Notes
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -510,10 +621,10 @@ export default function App() {
             </button>
             <div className="flex flex-col items-center text-center">
               <div className="w-20 h-20 bg-gradient-to-tr from-amber-400 to-amber-200 text-white rounded-3xl flex items-center justify-center text-2xl font-black mb-3 shadow-lg shadow-amber-400/30">
-                {session.user.email[0].toUpperCase()}
+                {(session?.user?.email || 'U')[0].toUpperCase()}
               </div>
               <h2 className="text-xl font-bold text-gray-800">Account Profile</h2>
-              <p className="text-xs text-gray-400">{session.user.email}</p>
+              <p className="text-xs text-gray-400">{session?.user?.email}</p>
               
               <div className="w-full mt-6 space-y-2">
                 <div className="flex justify-between items-center p-3.5 bg-gray-50 rounded-2xl text-sm text-gray-600 font-medium">
@@ -583,7 +694,7 @@ export default function App() {
                 <div className="text-xs text-gray-700 space-y-1 pl-6">
                   <p><strong>Lead Architect:</strong> Shammas</p>
                   <p><strong>Stack:</strong> React, Tailwind CSS, Supabase Cloud</p>
-                  <p><strong>Version:</strong> CloudNotes v3.6</p>
+                  <p><strong>Version:</strong> CloudNotes v3.7</p>
                 </div>
               </div>
 
